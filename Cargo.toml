@@ -1,0 +1,12 @@
+[package]
+name = "cloudfilter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nalgebra = "0.32.2"
+rospcl = { path = "../libs/rospcl" }
+rosrust = "0.9.10"
+rosrust_msg = "0.1.6"
