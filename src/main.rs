@@ -1,11 +1,10 @@
-fn filter(input: Vec<nalgebra::Point3<f32>>) -> Vec<nalgebra::Point3<f32>> {
+fn filter(input: rospcl::Pointcloud3F32) -> rospcl::Pointcloud3F32 {
     let mut output = Vec::new();
     for point in input {
-        if point.z > 0.0 {
-            output.push(point);
-        }
+        output.push(point); // TODO: implement filtering arguments here
     }
-    output
+
+    rospcl::Pointcloud3F32::new(output)
 }
 
 fn main() {
@@ -21,36 +20,26 @@ fn main() {
     };
 
     // subscribe to a topic
-    let subber_ = rosrust::subscribe("/virtual_edge/merged_points", 100, move |msg: rosrust_msg::sensor_msgs::PointCloud2| {
-        let pointcloud = rospcl::xzy_pointcloud_f32_from_msg(&msg);
-        match pointcloud {
-            Ok(cloud) => {
-                let filtered_cloud = filter(cloud);
-                let mut out_msg = rospcl::xzy_pointcloud_f32_to_msg(&filtered_cloud);
-                out_msg.header = msg.header;
-                match pubber.send(out_msg) {
-                    Ok(_) => {
-                        rosrust::ros_info!("Sent filtered pointcloud with {} points", filtered_cloud.len());
-                    }
-                    Err(err) => {
-                        rosrust::ros_err!("Could not send filtered pointcloud: {:?}", err);
-                    }
-                }
-            }
+    let subber = rosrust::subscribe("/velodyne_points", 100, move |msg: rosrust_msg::sensor_msgs::PointCloud2| {
+        let incoming_header = msg.header.clone();
+        match rospcl::Pointcloud3F32::from_msg(msg) {
             Err(e) => {
                 rosrust::ros_err!("Error: {:?}", e);
             }
+            Ok(cloud) => {
+                let filtered_cloud = filter(cloud);
+                let mut out_msg = filtered_cloud.to_msg().unwrap();
+                out_msg.header = incoming_header;
+
+                if let Err(e) = pubber.send(out_msg) {
+                    rosrust::ros_err!("Could not send filtered pointcloud: {:?}", e);
+                }
+            }
         }
-        rosrust::ros_info!("Received pointcloud with {} points", msg.width * msg.height);
     });
 
-    match subber_ {
-        Ok(_) => {
-            rosrust::ros_info!("Subscribed to pointcloud topic");
-        }
-        Err(_) => {
-            panic!("Failed to subscribe to pointcloud topic");
-        }
+    if let Err(e) = subber {
+        rosrust::ros_err!("Error: {:?}", e);
     }
 
     rosrust::ros_info!("Spinning...");

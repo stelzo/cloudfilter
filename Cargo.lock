@@ -843,6 +843,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "mem_macros"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6533f8d40a489f5eba44718880fe6c88d38deff1f12398930462c1246a2aa017"
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1189,7 +1195,9 @@ dependencies = [
 name = "rospcl"
 version = "0.1.0"
 dependencies = [
+ "mem_macros",
  "nalgebra",
+ "num-traits",
  "rosrust",
  "rosrust_msg",
 ]
