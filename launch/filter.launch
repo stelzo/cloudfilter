@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+    <node pkg="cloudfilter" type="cloudfilter" name="pointcloudfilter" output="screen">
+        <remap from="cloud"     to="/velodyne_points"/>
+        <remap from="filtered"  to="/filtered"/>
+
+
+        <param name="filter_type"   type="string" value="aabb"/>
+
+        <param name="aabb_min_x"    type="double" value="-999999999.9"/>
+        <param name="aabb_max_x"    type="double" value="999999999.9"/>
+
+        <param name="aabb_min_y"    type="double" value="-999999999.9"/>
+        <param name="aabb_max_y"    type="double" value="999999999.9"/>
+
+        <param name="aabb_min_z"    type="double" value="-999999999.9"/>
+        <param name="aabb_max_z"    type="double" value="999999999.9"/>
+    </node>
+</launch>
