@@ -8,3 +8,4 @@ nalgebra = "0.32.2"
 rospcl = { path = "../libs/rospcl-rs" }
 rosrust = "0.9.10"
 rosrust_msg = "0.1.6"
+tf_rosrust = "0.1.0"
