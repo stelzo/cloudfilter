@@ -73,7 +73,7 @@ fn main() {
         let incoming_header = msg.header.clone();
 
 
-        match ros_pointcloud2::ConvertXYZI::try_from(msg) {
+        match Convert::try_from(msg) {
             Err(e) => {
                 rosrust::ros_err!("Error: {:?}", e);
             }
@@ -85,7 +85,7 @@ fn main() {
                             max: [aabb_max_x as f32, aabb_max_y as f32, aabb_max_z as f32],
                         };
                         let filtered_cloud = aabb_filter(cloud, aabb, &tf.transform);
-                        let filtered_msg: Result<PointCloud2, ros_pointcloud2::ConversionError> = ros_pointcloud2::ConvertXYZI::try_from(filtered_cloud).unwrap().try_into();
+                        let filtered_msg: Result<PointCloud2, ros_pointcloud2::ConversionError> = Convert::try_from(filtered_cloud).unwrap().try_into();
                         match filtered_msg {
                             Ok(mut out_msg) => {
                                 out_msg.header = incoming_header;
