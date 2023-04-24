@@ -21,21 +21,22 @@ fn aabb_filter(input: Convert, aabb: AABB, tf: &tf_rosrust::transforms::geometry
         )),
     );
 
-    input.map(|point| {
-        (tf.transform_point(&nalgebra::Point3::new(point.x, point.y, point.z)), point.intensity) // transform
-    }).filter(|point| { // aabb filter
-        point.0[0] >= aabb.min[0]
-            && point.0[0] <= aabb.max[0]
-            && point.0[1] >= aabb.min[1]
-            && point.0[1] <= aabb.max[1]
-            && point.0[2] >= aabb.min[2]
-            && point.0[2] <= aabb.max[2]
-    }).map(|point| {
-        Point {
-            x: point.0[0],
-            y: point.0[1],
-            z: point.0[2],
-            intensity: point.1,
+    input.filter_map(|point| {
+        let transformed_point = tf.transform_point(&nalgebra::Point3::new(point.x, point.y, point.z));
+        if transformed_point[0] >= aabb.min[0]
+            && transformed_point[0] <= aabb.max[0]
+            && transformed_point[1] >= aabb.min[1]
+            && transformed_point[1] <= aabb.max[1]
+            && transformed_point[2] >= aabb.min[2]
+            && transformed_point[2] <= aabb.max[2] {
+            Some(Point {
+                x: transformed_point[0],
+                y: transformed_point[1],
+                z: transformed_point[2],
+                intensity: point.intensity
+            })
+        } else {
+            None
         }
     }).collect()
 }
