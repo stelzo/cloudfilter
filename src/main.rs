@@ -5,7 +5,6 @@ struct AABB {
     min: [f32; 3],
     max: [f32; 3],
 }
-
 type Point = ros_pointcloud2::pcl_utils::PointXYZI;
 type Convert = ros_pointcloud2::ConvertXYZI;
 
@@ -45,7 +44,7 @@ fn main() {
     rosrust::init("cloudfilter");
     let listener = TfListener::new();
 
-    let pubber = match rosrust::publish("cloud", 100) {
+    let pubber = match rosrust::publish("filtered", 100) {
         Ok(p) => p,
         Err(_) => panic!("Failed to publish to filtered topic"),
     };
@@ -72,7 +71,6 @@ fn main() {
         };
         let incoming_header = msg.header.clone();
 
-
         match Convert::try_from(msg) {
             Err(e) => {
                 rosrust::ros_err!("Error: {:?}", e);
@@ -85,18 +83,30 @@ fn main() {
                             max: [aabb_max_x as f32, aabb_max_y as f32, aabb_max_z as f32],
                         };
                         let filtered_cloud = aabb_filter(cloud, aabb, &tf.transform);
-                        let filtered_msg: Result<PointCloud2, ros_pointcloud2::ConversionError> = Convert::try_from(filtered_cloud).unwrap().try_into();
-                        match filtered_msg {
-                            Ok(mut out_msg) => {
-                                out_msg.header = incoming_header;
-                                out_msg.header.frame_id = global_zero_frame.clone();
-
-                                if let Err(e) = pubber.send(out_msg) {
-                                    rosrust::ros_err!("Could not send filtered pointcloud: {:?}", e);
-                                }
-                            }
+                        if filtered_cloud.is_empty() {
+                            return;
+                        }
+                        let convert: Result<Convert, ros_pointcloud2::ConversionError> = Convert::try_from(filtered_cloud);
+                        match convert {
                             Err(e) => {
-                                rosrust::ros_err!("Could not convert filtered pointcloud: {:?}", e);
+                                rosrust::ros_err!("Error: {:?}", e);
+                                return;
+                            }
+                            Ok(converted) => {
+                                let filtered_msg: Result<PointCloud2, ros_pointcloud2::ConversionError> = converted.try_into();
+                                match filtered_msg {
+                                    Ok(mut out_msg) => {
+                                        out_msg.header = incoming_header;
+                                        out_msg.header.frame_id = global_zero_frame.clone();
+
+                                        if let Err(e) = pubber.send(out_msg) {
+                                            rosrust::ros_err!("Could not send filtered pointcloud: {:?}", e);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        rosrust::ros_err!("Could not convert filtered pointcloud: {:?}", e);
+                                    }
+                                }
                             }
                         }
                     }
