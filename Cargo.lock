@@ -264,7 +264,7 @@ name = "cloudfilter"
 version = "0.1.0"
 dependencies = [
  "nalgebra 0.32.2",
- "rospcl",
+ "ros_pointcloud2",
  "rosrust",
  "rosrust_msg",
  "tf_rosrust",
@@ -1220,13 +1220,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "rospcl"
+name = "ros_pointcloud2"
 version = "0.1.0"
 dependencies = [
  "mem_macros",
- "nalgebra 0.32.2",
  "num-traits",
- "rosrust",
  "rosrust_msg",
 ]
 
