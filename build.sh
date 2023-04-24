@@ -36,6 +36,17 @@ mkdir -p "$catkin_pkg_bin_path"
 
 # install rust using curl or wget. If both are not installed, curl is installed but needs sudo.
 install_rust() {
+  if [ -f "$BASE_DIR"/.rustup.lock ]; then
+    echo "rustup is already installing, please wait..."
+    while [ -f "$BASE_DIR"/.rustup.lock ]; do
+      sleep 1
+    done
+    return
+  fi
+
+  # set lock file
+  touch "$BASE_DIR"/.rustup.lock
+
   if ! command -v curl &> /dev/null
   then
     if ! command -v wget &> /dev/null
@@ -51,6 +62,9 @@ install_rust() {
   fi
 
   source "$HOME"/.cargo/env
+
+  # remove lock file
+  rm "$BASE_DIR"/.rustup.lock
 }
 
 # check if rust is installed
