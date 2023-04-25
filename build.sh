@@ -4,6 +4,10 @@ set -e
 ### A script to build rust binaries and copy them to a catkin package bin folder.
 ### The script is intended to be used in a catkin package with a Cargo.toml file. It installs rust if it is not installed.
 ### Usage: ./build.sh DEBUG|RELEASE [binary1] [binary2] ...
+###
+### @author: Christopher Sieh <stelzo@steado.de>
+### @date: 2023-04-25
+### @license: MIT
 
 # check first parameter case insensitive(!) debug or release
 if [[ ! "$1" =~ ^(DEBUG|RELEASE|debug|release|Debug|Release)$ ]]; then

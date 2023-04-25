@@ -1,8 +1,16 @@
+### A CMakeLists.txt file for using ros nodes in a catkin workspace.
+### We just call the build script that builds the Rust binaries and copies them to the devel space.
+###
+### @author: Christopher Sieh <stelzo@steado.de>
+### @date: 2023-04-25
+### @license: MIT
+
 cmake_minimum_required(VERSION 3.0)
 project(cloudfilter)
 
-####### EDIT LIST TO INCLUDE YOUR BINARIES THAT SHOULD BE INSTALLED #######
+####### Edit this list to include all your Rust binaries #######
 set(BINARIES "${CMAKE_PROJECT_NAME}")
+#######
 
 find_package(catkin REQUIRED)
 catkin_package()

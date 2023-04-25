@@ -1,3 +1,4 @@
+use ros_pointcloud2::fallible_iterator::FallibleIterator;
 use rosrust_msg::sensor_msgs::PointCloud2;
 use tf_rosrust::{TfListener};
 
@@ -10,7 +11,6 @@ type Convert = ros_pointcloud2::ConvertXYZI;
 
 #[inline]
 fn aabb_filter(input: Convert, aabb: AABB, tf: &tf_rosrust::transforms::geometry_msgs::Transform) -> Vec<Point> {
-    // transformation from the pointcloud frame to the global zero frame
     let tf = nalgebra::geometry::Isometry3::from_parts(
         nalgebra::geometry::Translation3::new(tf.translation.x as f32, tf.translation.y as f32, tf.translation.z as f32),
         nalgebra::geometry::UnitQuaternion::from_quaternion(nalgebra::geometry::Quaternion::new(
@@ -29,16 +29,16 @@ fn aabb_filter(input: Convert, aabb: AABB, tf: &tf_rosrust::transforms::geometry
             && transformed_point[1] <= aabb.max[1]
             && transformed_point[2] >= aabb.min[2]
             && transformed_point[2] <= aabb.max[2] {
-            Some(Point {
+            Ok(Some(Point {
                 x: transformed_point[0],
                 y: transformed_point[1],
                 z: transformed_point[2],
-                intensity: point.intensity
-            })
+                intensity: point.intensity,
+            }))
         } else {
-            None
+            Ok(None)
         }
-    }).collect()
+    }).collect::<Vec<Point>>().unwrap_or(Vec::new())
 }
 
 fn main() {
