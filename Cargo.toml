@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 nalgebra = "0.32.2"
-ros_pointcloud2 = "0.1.0"
+ros_pointcloud2 = { version = "0.2.0", features = ["rosrust_msg"] }
 rosrust = "0.9.10"
 rosrust_msg = "0.1.6"
 tf_rosrust = "0.1.0"

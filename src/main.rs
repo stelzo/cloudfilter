@@ -1,3 +1,4 @@
+use ros_pointcloud2::ros_types::PointCloud2Msg;
 use ros_pointcloud2::fallible_iterator::FallibleIterator;
 use rosrust_msg::sensor_msgs::PointCloud2;
 use tf_rosrust::{TfListener};
@@ -71,6 +72,7 @@ fn main() {
             }
         };
         let incoming_header = msg.header.clone();
+        let msg: PointCloud2Msg = msg.into();
 
         match Convert::try_from(msg) {
             Err(e) => {
@@ -94,9 +96,10 @@ fn main() {
                                 return;
                             }
                             Ok(converted) => {
-                                let filtered_msg: Result<PointCloud2, ros_pointcloud2::ConversionError> = converted.try_into();
+                                let filtered_msg: Result<PointCloud2Msg, ros_pointcloud2::ConversionError> = converted.try_into();
                                 match filtered_msg {
-                                    Ok(mut out_msg) => {
+                                    Ok(out_msg) => {
+                                        let mut out_msg: PointCloud2 = out_msg.into();
                                         out_msg.header = incoming_header;
                                         out_msg.header.frame_id = global_zero_frame.clone();
 
