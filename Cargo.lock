@@ -1227,9 +1227,9 @@ dependencies = [
 
 [[package]]
 name = "ros_pointcloud2"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3545ed3185e024b0ca2ea37d8f1e0fd08621e99ca769d77afc5b27194a7068fb"
+checksum = "4f0026b8529709d6c00f375a3068395dde427dc645c66169b5908f73100c8f4b"
 dependencies = [
  "fallible-iterator",
  "mem_macros",
