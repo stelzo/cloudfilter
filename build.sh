@@ -113,7 +113,7 @@ cd "$BASE_DIR"
 if [ "$CARGO_BUILD_TYPE" = "debug" ]; then
   cargo build --bins
 else
-  cargo build --release --bins
+  RUSTFLAGS="-C target-cpu=native" cargo build --release --bins
 fi
 
 # copy binaries to catkin package bin folder
