@@ -5,8 +5,9 @@
         <remap from="filtered"  to="/filtered"/>
 
 
-        <param name="global_zero_frame"   type="string" value="base_footprint"/>
-        <param name="filter_type"   type="string" value="aabb"/>
+        <param name="global_zero_frame" type="string" value="base_footprint"/>
+        <param name="filter_type"       type="string" value="aabb"/>
+        <param name="invert"            type="bool" value="false"/>
 
         <param name="aabb_min_x"    type="double" value="-999999999.9"/>
         <param name="aabb_max_x"    type="double" value="999999999.9"/>
