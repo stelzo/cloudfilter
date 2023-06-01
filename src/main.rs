@@ -116,12 +116,12 @@ impl Filter {
 
     pub fn cloud_callback(&mut self, msg: PointCloud2) {
         let start_callback = std::time::Instant::now();
-        let fov_right = rosrust::param("~fov_right").unwrap().get().unwrap_or(180.0) as f32;
+        let fov_right = rosrust::param("~fov_right").unwrap().get().unwrap_or(0.0) as f32;
         let fov_left = rosrust::param("~fov_left")
             .unwrap()
             .get()
-            .unwrap_or(-179.9999) as f32;
-        let invert_fov = rosrust::param("~invert_fov")
+            .unwrap_or(0.0) as f32;
+        let enable_fov = rosrust::param("~enable_fov")
             .unwrap()
             .get()
             .unwrap_or(false);
@@ -198,7 +198,7 @@ impl Filter {
         params.translation = (tf.translation.x, tf.translation.y, tf.translation.z);
         params.fov_left = fov_left;
         params.fov_right = fov_right;
-        params.invert_vertical_fov = invert_fov;
+        params.enable_horizontal_fov = enable_fov;
         if self.polygon.is_some() {
             let poly = self.polygon.as_ref().unwrap().clone();
             let poly =
