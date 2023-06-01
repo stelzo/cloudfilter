@@ -1,13 +1,14 @@
 <?xml version="1.0"?>
 <launch>
     <node pkg="cloudfilter" type="cloudfilter" name="pointcloudfilter" output="screen">
-        <remap from="cloud"     to="/velodyne_points"/>
-        <remap from="filtered"  to="/filtered"/>
+        <remap from="~cloud"     to="/velodyne_points"/>
+        <remap from="~filtered"  to="/filtered"/>
 
+        <param name="verbose"       type="bool" value="true"/>
 
         <param name="global_zero_frame" type="string" value="base_footprint"/>
         <param name="filter_type"       type="string" value="aabb"/>
-        <param name="invert"            type="bool" value="false"/>
+        <param name="invert_aabb"       type="bool" value="false"/>
 
         <param name="aabb_min_x"    type="double" value="-999999999.9"/>
         <param name="aabb_max_x"    type="double" value="999999999.9"/>
@@ -17,5 +18,15 @@
 
         <param name="aabb_min_z"    type="double" value="-999999999.9"/>
         <param name="aabb_max_z"    type="double" value="999999999.9"/>
+
+        <param name="min_dist"          type="double" value="0.0"/>
+        <param name="max_dist"          type="double" value="999999999.9"/>
+        <param name="invert_distance"   type="int" value="10"/>
+
+        <param name="fov_left"      type="double" value="-179.9999999"/>
+        <param name="fov_right"     type="double" value="180.0"/>
+        <param name="invert_fov"    type="bool" value="false"/>
+
+        <param name="invert_polygon"    type="bool" value="false"/>
     </node>
 </launch>

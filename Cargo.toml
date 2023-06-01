@@ -9,7 +9,8 @@ ros_pointcloud2 = { version = "0.2.1", features = ["rosrust_msg"] }
 rosrust = "0.9.10"
 rosrust_msg = "0.1.6"
 tf_rosrust = "0.1.0"
+cupcl = { git = "https://github.com/stelzo/cupcl-rs" }
 
-[profile.release]
-lto = "fat" # "thin" or "fat", uncomment while developing
-panic = "abort"
+#[profile.release]
+#lto = "fat" # "thin" or "fat", uncomment while developing
+#panic = "abort"
