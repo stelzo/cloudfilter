@@ -333,5 +333,33 @@ fn main() {
             })
         });
 
+    let state_clone = Arc::clone(&filter);
+    let _service_set_distances = rosrust::service::<rosrust_msg::cloudfilter::SetDistances, _>(
+        "~set_distances",
+        move |req| {
+            let min_distance: f32 = req.min;
+            let max_distance: f32 = req.max;
+            let invert: bool = req.invert;
+
+            Ok(rosrust_msg::cloudfilter::SetDistancesRes {
+                success: match state_clone.lock() {
+                    Ok(mut state) => {
+                        state.min_dist = min_distance;
+                        state.max_dist = max_distance;
+                        state.invert_distance = invert;
+                        true
+                    }
+                    Err(e) => {
+                        ros_err!(
+                            "Failed to lock state in filter for distances service: {:?}",
+                            e
+                        );
+                        false
+                    }
+                },
+            })
+        },
+    );
+
     rosrust::spin();
 }
