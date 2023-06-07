@@ -4,6 +4,7 @@ use ros_pointcloud2::ros_types::PointCloud2Msg;
 use ros_pointcloud2::ConvertXYZI;
 use rosrust_msg::geometry_msgs::PolygonStamped;
 use rosrust_msg::sensor_msgs::PointCloud2;
+use rosrust::Time;
 use std::sync::{Arc, Mutex};
 use tf_rosrust::TfListener;
 
@@ -21,8 +22,9 @@ struct Filter {
     min_dist: f32,
     max_dist: f32,
     invert_distance: bool,
+    global_frame: String,
     global_zero_frame: String,
-    polygon: Option<Vec<cupcl::Point2>>,
+    polygon: Option<Vec<nalgebra::geometry::Point3<f32>>>,
     invert_polygon: bool,
     point_buffer: Vec<cupcl::Point>,
     tf: Option<nalgebra::geometry::Isometry3<f32>>,
@@ -73,6 +75,11 @@ impl Filter {
             .get()
             .unwrap_or(false);
 
+        let global_frame: String = rosrust::param("~global_frame")
+            .unwrap()
+            .get()
+            .unwrap_or("odom_combined".to_string());
+        
         let global_zero_frame: String = rosrust::param("~global_zero_frame")
             .unwrap()
             .get()
@@ -92,6 +99,7 @@ impl Filter {
             min_dist,
             max_dist,
             invert_distance,
+            global_frame,
             global_zero_frame,
             polygon: None,
             invert_polygon,
@@ -100,16 +108,49 @@ impl Filter {
         }
     }
 
+    fn get_transform(&self, to_frame: &str, from_frame: &str, stamp: &Time) -> Option<nalgebra::geometry::Isometry3<f32>> {
+        let tf = self.listener.lookup_transform(
+            to_frame,
+            from_frame,
+            *stamp,
+        );
+        let tf = match tf {
+            Ok(t) => t,
+            Err(e) => {
+                rosrust::ros_warn!("TF: {:?}", e);
+                return None;
+            }
+        };
+        return Some(nalgebra::geometry::Isometry3::from_parts(
+            nalgebra::geometry::Translation3::new(
+                tf.transform.translation.x as f32,
+                tf.transform.translation.y as f32,
+                tf.transform.translation.z as f32,
+            ),
+            nalgebra::geometry::UnitQuaternion::from_quaternion(
+                nalgebra::geometry::Quaternion::new(
+                    tf.transform.rotation.w as f32,
+                    tf.transform.rotation.x as f32,
+                    tf.transform.rotation.y as f32,
+                    tf.transform.rotation.z as f32,
+                ),
+            ),
+        ));
+    }
+
     pub fn polygon_callback(&mut self, msg: PolygonStamped) {
-        if self.tf.is_none() {
-            return;
-        }
-        let tf = self.tf.unwrap();
+        let tf = self.get_transform(self.global_frame.as_str(), msg.header.frame_id.as_str(), &msg.header.stamp);
+        let tf = match tf {
+            Some(t) => t,
+            None => {
+                return;
+            }
+        };
 
         let mut poly = Vec::new();
         for p in msg.polygon.points {
             let p = tf * nalgebra::geometry::Point3::new(p.x as f32, p.y as f32, p.z as f32);
-            poly.push(cupcl::Point2::new(p.x, p.y));
+            poly.push(p);
         }
         self.polygon = Some(poly);
     }
@@ -130,36 +171,14 @@ impl Filter {
         let stream = cupcl::CudaStream::new();
 
         if self.tf.is_none() {
-            let tf = self.listener.lookup_transform(
-                self.global_zero_frame.as_str(),
-                msg.header.frame_id.as_str(),
-                msg.header.stamp,
-            );
-            let tf = match tf {
-                Ok(t) => t,
-                Err(e) => {
-                    rosrust::ros_warn!("TF: {:?}", e);
-                    return;
-                }
-            };
-            self.tf = Some(nalgebra::geometry::Isometry3::from_parts(
-                nalgebra::geometry::Translation3::new(
-                    tf.transform.translation.x as f32,
-                    tf.transform.translation.y as f32,
-                    tf.transform.translation.z as f32,
-                ),
-                nalgebra::geometry::UnitQuaternion::from_quaternion(
-                    nalgebra::geometry::Quaternion::new(
-                        tf.transform.rotation.w as f32,
-                        tf.transform.rotation.x as f32,
-                        tf.transform.rotation.y as f32,
-                        tf.transform.rotation.z as f32,
-                    ),
-                ),
-            ));
+            self.tf = self.get_transform(self.global_zero_frame.as_str(), msg.header.frame_id.as_str(), &msg.header.stamp);
+            if self.tf.is_none() {
+                return;
+            }
         }
         let tf = self.tf.unwrap();
 
+        let msg_stamp = msg.header.clone().stamp;
         let in_msg: PointCloud2Msg = msg.into();
         let incoming_header = in_msg.header.clone();
         let points_n = (in_msg.width * in_msg.height) as usize;
@@ -200,10 +219,24 @@ impl Filter {
         params.fov_right = fov_right;
         params.enable_horizontal_fov = enable_fov;
         if self.polygon.is_some() {
-            let poly = self.polygon.as_ref().unwrap().clone();
-            let poly =
+            let poly_tf = self.get_transform(self.global_zero_frame.as_str(), self.global_frame.as_str(), &msg_stamp);
+            let poly_tf = match poly_tf {
+                Some(t) => t,
+                None => {
+                    return;
+                }
+            };
+
+            let poly_points = self.polygon.as_ref().unwrap().clone();
+            let mut poly = Vec::new();
+            for p in poly_points {
+                let p = poly_tf * nalgebra::geometry::Point3::new(p.x as f32, p.y as f32, p.z as f32);
+                poly.push(cupcl::Point2::new(p.x, p.y));
+            };
+
+            let poly_buffer =
                 cupcl::CudaBuffer::from_vec(&stream, poly, std::mem::size_of::<cupcl::Point2>()); // TODO only do this once when getting new polygon
-            params.polygon = Some(poly);
+            params.polygon = Some(poly_buffer);
             params.invert_polygon = self.invert_polygon;
         }
 
@@ -221,6 +254,10 @@ impl Filter {
                 intensity: p.i,
             })
             .collect::<Vec<_>>();
+        if out_points.is_empty() {
+            rosrust::ros_warn!("Filtered pointcloud is empty!");
+            return;
+        }
         let mut internal_msg: PointCloud2Msg = ConvertXYZI::try_from(out_points)
             .unwrap()
             .try_into()
