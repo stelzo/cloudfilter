@@ -1,11 +1,16 @@
+use cupcl::Point2;
 use ros_pointcloud2::fallible_iterator::FallibleIterator;
 use ros_pointcloud2::pcl_utils::PointXYZI;
 use ros_pointcloud2::ros_types::PointCloud2Msg;
 use ros_pointcloud2::ConvertXYZI;
+use rosrust::{ros_err, ros_info, ros_warn};
 use rosrust_msg::geometry_msgs::PolygonStamped;
 use rosrust_msg::sensor_msgs::PointCloud2;
 use std::sync::{Arc, Mutex};
 use tf_rosrust::TfListener;
+
+type PointType = PointXYZI;
+type Converter = ConvertXYZI;
 
 struct Filter {
     filtered_pub: rosrust::Publisher<PointCloud2>,
@@ -26,6 +31,9 @@ struct Filter {
     invert_polygon: bool,
     point_buffer: Vec<cupcl::Point>,
     tf: Option<nalgebra::geometry::Isometry3<f32>>,
+    fov_right: f32,
+    fov_left: f32,
+    fov_enabled: bool,
 }
 
 impl Filter {
@@ -78,6 +86,13 @@ impl Filter {
             .get()
             .unwrap_or("base_footprint".to_string());
 
+        let fov_right = rosrust::param("~fov_right").unwrap().get().unwrap_or(0.0) as f32;
+        let fov_left = rosrust::param("~fov_left").unwrap().get().unwrap_or(0.0) as f32;
+        let fov_enabled = rosrust::param("~enable_fov")
+            .unwrap()
+            .get()
+            .unwrap_or(false);
+
         Self {
             filtered_pub: rosrust::publish("~filtered", 100).unwrap(),
             listener: TfListener::new(),
@@ -97,14 +112,20 @@ impl Filter {
             invert_polygon,
             point_buffer: Vec::new(),
             tf: None,
+            fov_right,
+            fov_left,
+            fov_enabled,
         }
     }
 
     pub fn polygon_callback(&mut self, msg: PolygonStamped) {
-        if self.tf.is_none() {
-            return;
-        }
-        let tf = self.tf.unwrap();
+        let tf = match self.tf {
+            Some(tf) => tf,
+            None => {
+                ros_warn!("No TF available for polygon");
+                return;
+            }
+        };
 
         let mut poly = Vec::new();
         for p in msg.polygon.points {
@@ -116,49 +137,43 @@ impl Filter {
 
     pub fn cloud_callback(&mut self, msg: PointCloud2) {
         let start_callback = std::time::Instant::now();
-        let fov_right = rosrust::param("~fov_right").unwrap().get().unwrap_or(0.0) as f32;
-        let fov_left = rosrust::param("~fov_left")
-            .unwrap()
-            .get()
-            .unwrap_or(0.0) as f32;
-        let enable_fov = rosrust::param("~enable_fov")
-            .unwrap()
-            .get()
-            .unwrap_or(false);
-
         self.point_buffer.clear();
         let stream = cupcl::CudaStream::new();
 
-        if self.tf.is_none() {
-            let tf = self.listener.lookup_transform(
-                self.global_zero_frame.as_str(),
-                msg.header.frame_id.as_str(),
-                msg.header.stamp,
-            );
-            let tf = match tf {
-                Ok(t) => t,
-                Err(e) => {
-                    rosrust::ros_warn!("TF: {:?}", e);
-                    return;
-                }
-            };
-            self.tf = Some(nalgebra::geometry::Isometry3::from_parts(
-                nalgebra::geometry::Translation3::new(
-                    tf.transform.translation.x as f32,
-                    tf.transform.translation.y as f32,
-                    tf.transform.translation.z as f32,
-                ),
-                nalgebra::geometry::UnitQuaternion::from_quaternion(
-                    nalgebra::geometry::Quaternion::new(
-                        tf.transform.rotation.w as f32,
-                        tf.transform.rotation.x as f32,
-                        tf.transform.rotation.y as f32,
-                        tf.transform.rotation.z as f32,
+        let tf = match self.tf {
+            Some(tf) => tf,
+            None => {
+                let tf = self.listener.lookup_transform(
+                    self.global_zero_frame.as_str(),
+                    msg.header.frame_id.as_str(),
+                    msg.header.stamp,
+                );
+                let tf = match tf {
+                    Ok(t) => t,
+                    Err(e) => {
+                        ros_warn!("TF: {:?}", e);
+                        return;
+                    }
+                };
+                self.tf = Some(nalgebra::geometry::Isometry3::from_parts(
+                    nalgebra::geometry::Translation3::new(
+                        tf.transform.translation.x as f32,
+                        tf.transform.translation.y as f32,
+                        tf.transform.translation.z as f32,
                     ),
-                ),
-            ));
-        }
-        let tf = self.tf.unwrap();
+                    nalgebra::geometry::UnitQuaternion::from_quaternion(
+                        nalgebra::geometry::Quaternion::new(
+                            tf.transform.rotation.w as f32,
+                            tf.transform.rotation.x as f32,
+                            tf.transform.rotation.y as f32,
+                            tf.transform.rotation.z as f32,
+                        ),
+                    ),
+                ));
+
+                self.tf.expect("TF was just set")
+            }
+        };
 
         let in_msg: PointCloud2Msg = msg.into();
         let incoming_header = in_msg.header.clone();
@@ -171,12 +186,13 @@ impl Filter {
             self.point_buffer = Vec::with_capacity(points_n);
         }
 
-        let convert = ConvertXYZI::try_from(in_msg);
-        if convert.is_err() {
-            rosrust::ros_warn!("Failed to convert pointcloud: {:?}", convert.err());
-            return;
-        }
-        let mut convert = convert.unwrap();
+        let mut convert = match Converter::try_from(in_msg) {
+            Ok(c) => c,
+            Err(e) => {
+                ros_warn!("Failed to create pointcloud converter: {:?}", e);
+                return;
+            }
+        };
         while let Ok(Some(point)) = convert.next() {
             self.point_buffer.push(cupcl::Point::new(
                 point.x,
@@ -196,15 +212,21 @@ impl Filter {
         params.invert_distance = self.invert_distance;
         params.rotation = (tf.rotation.i, tf.rotation.j, tf.rotation.k, tf.rotation.w);
         params.translation = (tf.translation.x, tf.translation.y, tf.translation.z);
-        params.fov_left = fov_left;
-        params.fov_right = fov_right;
-        params.enable_horizontal_fov = enable_fov;
-        if self.polygon.is_some() {
-            let poly = self.polygon.as_ref().unwrap().clone();
-            let poly =
-                cupcl::CudaBuffer::from_vec(&stream, poly, std::mem::size_of::<cupcl::Point2>()); // TODO only do this once when getting new polygon
-            params.polygon = Some(poly);
-            params.invert_polygon = self.invert_polygon;
+        params.fov_left = self.fov_left;
+        params.fov_right = self.fov_right;
+        params.enable_horizontal_fov = self.fov_enabled;
+
+        match self.polygon.as_ref() {
+            None => {}
+            Some(poly) => {
+                let poly = cupcl::CudaBuffer::from_vec(
+                    &stream,
+                    poly.clone(),
+                    std::mem::size_of::<Point2>(),
+                );
+                params.polygon = Some(poly);
+                params.invert_polygon = self.invert_polygon;
+            }
         }
 
         let start_filter = std::time::Instant::now();
@@ -214,29 +236,42 @@ impl Filter {
         let out_points = output
             .as_slice()
             .iter()
-            .map(|p| PointXYZI {
+            .map(|p| PointType {
                 x: p.x,
                 y: p.y,
                 z: p.z,
                 intensity: p.i,
             })
             .collect::<Vec<_>>();
-        let mut internal_msg: PointCloud2Msg = ConvertXYZI::try_from(out_points)
-            .unwrap()
-            .try_into()
-            .unwrap();
+        if out_points.is_empty() {
+            ros_warn!("Filtered pointcloud is empty");
+            return;
+        }
+        let mut internal_msg: PointCloud2Msg = match Converter::try_from(out_points) {
+            Ok(c) => match c.try_into() {
+                Ok(m) => m,
+                Err(e) => {
+                    ros_err!("Failed to convert pointcloud: {:?}", e);
+                    return;
+                }
+            },
+            Err(e) => {
+                ros_err!("Failed to convert pointcloud: {:?}", e);
+                return;
+            }
+        };
 
         internal_msg.header = incoming_header;
         internal_msg.header.frame_id = self.global_zero_frame.clone();
 
         let out_msg: PointCloud2 = internal_msg.into();
         if let Err(e) = self.filtered_pub.send(out_msg) {
-            rosrust::ros_err!("Could not send filtered pointcloud: {:?}", e);
+            ros_err!("Could not send filtered pointcloud: {:?}", e);
         }
         let end_callback = std::time::Instant::now();
         if self.verbose {
-            rosrust::ros_info!("Filtering: {:?}", end_filter - start_filter);
-            rosrust::ros_info!("Callback: {:?}", end_callback - start_callback);
+            ros_info!("Filtering: {:?}", end_filter - start_filter);
+            ros_info!("Callback: {:?}", end_callback - start_callback);
         }
     }
 }
@@ -248,13 +283,55 @@ fn main() {
 
     let state_clone = Arc::clone(&filter);
     let _cloud_subber = rosrust::subscribe("~cloud", 100, move |msg: PointCloud2| {
-        state_clone.lock().unwrap().cloud_callback(msg);
+        match state_clone.lock() {
+            Ok(mut state) => state.cloud_callback(msg),
+            Err(e) => {
+                ros_err!(
+                    "Failed to lock state in filter for point cloud callback: {:?}",
+                    e
+                );
+            }
+        };
     });
 
     let state_clone = Arc::clone(&filter);
     let _poly_subber = rosrust::subscribe("~polygon", 100, move |msg: PolygonStamped| {
-        state_clone.lock().unwrap().polygon_callback(msg);
+        match state_clone.lock() {
+            Ok(mut state) => state.polygon_callback(msg),
+            Err(e) => {
+                ros_err!(
+                    "Failed to lock state in filter for polygon service: {:?}",
+                    e
+                );
+            }
+        };
     });
+
+    let state_clone = Arc::clone(&filter);
+    let _service_set_nav_goal_decision =
+        rosrust::service::<rosrust_msg::cloudfilter::SetFov, _>("~set_fov", move |req| {
+            let left: f32 = req.left;
+            let right: f32 = req.right;
+            let enable: bool = req.enable;
+
+            Ok(rosrust_msg::cloudfilter::SetFovRes {
+                success: match state_clone.lock() {
+                    Ok(mut state) => {
+                        state.fov_enabled = enable;
+                        state.fov_left = left;
+                        state.fov_right = right;
+                        true
+                    }
+                    Err(e) => {
+                        ros_err!(
+                            "Failed to lock state in filter for polygon service: {:?}",
+                            e
+                        );
+                        false
+                    }
+                },
+            })
+        });
 
     rosrust::spin();
 }

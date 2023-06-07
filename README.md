@@ -17,6 +17,13 @@ Note: The points get transformed into a different frame before applying the filt
 ## Usage
 You do not need to have Rust in order to use this node. It will be installed automatically by the `build.sh` script.
 
+But you need to install the service message before building the node:
+```shell
+sudo mkdir -p /opt/ros/$ROS_DISTRO/share/cloudfilter/srv
+sudo cp srv/*.srv /opt/ros/$ROS_DISTRO/share/cloudfilter/srv
+```
+
+Then build normally:
 ```shell
 cd ~/catkin_ws/src
 git clone https://github.com/stelzo/cloudfilter
