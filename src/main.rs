@@ -308,7 +308,7 @@ fn main() {
     });
 
     let state_clone = Arc::clone(&filter);
-    let _service_set_nav_goal_decision =
+    let _service_set_fov =
         rosrust::service::<rosrust_msg::cloudfilter::SetFov, _>("~set_fov", move |req| {
             let left: f32 = req.left;
             let right: f32 = req.right;
