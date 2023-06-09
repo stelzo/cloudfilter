@@ -8,9 +8,11 @@ use rosrust_msg::geometry_msgs::PolygonStamped;
 use rosrust_msg::sensor_msgs::PointCloud2;
 use std::sync::{Arc, Mutex};
 use tf_rosrust::TfListener;
+use ros_pointcloud2::ConvertXYZ;
+use ros_pointcloud2::pcl_utils::PointXYZ;
 
-type PointType = PointXYZI;
-type Converter = ConvertXYZI;
+type PointType = PointXYZ;
+type Converter = ConvertXYZ;
 
 struct Filter {
     filtered_pub: rosrust::Publisher<PointCloud2>,
@@ -35,6 +37,7 @@ struct Filter {
     fov_right: f32,
     fov_left: f32,
     fov_enabled: bool,
+    invert_fov: bool,
     disable_with_first_polygon: bool,
 }
 
@@ -97,6 +100,11 @@ impl Filter {
 
         let global_frame = rosrust::param("~global_frame").unwrap().get().unwrap_or("odom_combined".to_string());
 
+        let invert_fov = rosrust::param("~invert_fov")
+        .unwrap()
+        .get()
+        .unwrap_or(false);
+
         let disable_with_first_polygon = rosrust::param("~disable_with_first_polygon")
             .unwrap()
             .get()
@@ -125,6 +133,7 @@ impl Filter {
             fov_right,
             fov_left,
             fov_enabled,
+            invert_fov,
             disable_with_first_polygon,
         }
     }
@@ -240,7 +249,7 @@ impl Filter {
                 point.x,
                 point.y,
                 point.z,
-                point.intensity,
+                0.0,
             ));
         }
 
@@ -257,6 +266,7 @@ impl Filter {
         params.fov_left = self.fov_left;
         params.fov_right = self.fov_right;
         params.enable_horizontal_fov = self.fov_enabled;
+        params.invert_fov = self.invert_fov;
 
         match self.global_polygon.as_ref() {
             None => {}
@@ -314,7 +324,6 @@ impl Filter {
                 x: p.x,
                 y: p.y,
                 z: p.z,
-                intensity: p.i,
             })
             .collect::<Vec<_>>();
         if out_points.is_empty() {    
